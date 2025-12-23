@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model FixedCostDefinition {
+  id       Int     @id @default(autoincrement())
+  name     String
+  amount   Decimal
+  isActive Boolean @default(true)
+}
+
+model MonthlyLedger {
+  id                 Int      @id @default(autoincrement())
+  month              DateTime @unique
+  totalFixedCosts    Decimal  @default(0)
+  totalAdSpend       Decimal  @default(0)
+  totalRevenue       Decimal  @default(0)
+  totalProductCosts  Decimal  @default(0)
+  totalShippingCosts Decimal  @default(0)
+  netProfit          Decimal  @default(0)
+}
+
+model Order {
+  id                 String      @id
+  orderNumber        String
+  createdAt          DateTime
+  paymentMethod      String
+  totalAmount        Decimal
+  gatewayFee         Decimal    @default(0)
+  productCost        Decimal
+  shippingCost       Decimal
+  returnShippingCost Decimal    @default(0)
+  isRevenueLocked    Boolean    @default(true)
+  unlockedAt         DateTime?
+  deliveryStatus     String     @default("Unshipped")
+  items              OrderItem[]
+}
+
+model OrderItem {
+  id          Int     @id @default(autoincrement())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id])
+  productName String
+  quantity    Int
+  costPerUnit Decimal
+}
+
+model AdSpend {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique
+  amount    Decimal
+  vatAmount Decimal
+  total     Decimal
+}
