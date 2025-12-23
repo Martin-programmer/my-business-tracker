@@ -4,6 +4,19 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const data = await request.json();
+
+    // --- НОВО: ЗАПИСВАМЕ СУРОВИТЕ ДАННИ ЗА ПРОВЕРКА ---
+    await prisma.webhookLog.create({
+      data: {
+        payload: JSON.stringify(data, null, 2) // Превръщаме данните в красив текст
+      }
+    });
+    // ----------------------------------------------------
+
+    console.log(`📥 Нова поръчка: ${data.name}`);
+export async function POST(request: Request) {
+  try {
+    const data = await request.json();
     console.log(`📥 Нова поръчка: ${data.name} (${data.total_price} ${data.currency})`);
 
     // 1. ВАЛУТНА КОНВЕРСИЯ (КРИТИЧНО!)

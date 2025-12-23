@@ -19,6 +19,11 @@ export default async function Home() {
   // 2. Взимаме Поръчките
   const orders = await prisma.order.findMany({ orderBy: { createdAt: 'desc' } });
 
+  // НОВО: Дърпаме последния лог от Shopify
+  const lastWebhook = await prisma.webhookLog.findFirst({
+    orderBy: { createdAt: 'desc' }
+  });
+
   // 3. СМЕТКИ (Logic)
   
   // А) Реален Приход (само отключени поръчки)
@@ -138,6 +143,20 @@ export default async function Home() {
                     </tbody>
                 </table>
             </div>
+        </div>
+
+{/* --- ЗОНА ЗА ДЕБЪГВАНЕ (САМО ЗА ТЕБ) --- */}
+        <div className="mt-12 p-6 bg-slate-900 text-green-400 rounded-xl overflow-hidden shadow-lg">
+            <h3 className="text-white font-bold text-lg mb-4">👾 Shopify Raw Data Debugger</h3>
+            <p className="text-gray-400 text-sm mb-4">Тук се показва точно какво е изпратил Shopify последния път:</p>
+            
+            {lastWebhook ? (
+                <pre className="whitespace-pre-wrap break-all text-xs font-mono bg-black p-4 rounded border border-slate-700 h-96 overflow-y-auto">
+                    {lastWebhook.payload}
+                </pre>
+            ) : (
+                <p className="text-gray-500 italic">Все още няма получени данни...</p>
+            )}
         </div>
 
       </div>
