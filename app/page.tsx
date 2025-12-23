@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import AddOrderForm from './components/AddOrderForm';
+import SyncMetaButton from './components/SyncMetaButton';
 
 const formatMoney = (amount: number) => {
   return new Intl.NumberFormat('bg-BG', {
@@ -95,6 +96,9 @@ export default async function Home() {
 
         {/* ФОРМА ЗА ТЕСТВАНЕ */}
         <AddOrderForm />
+
+                {/* Фейсбук */}
+        <SyncMetaButton />
 
         {/* СПИСЪК С ПОСЛЕДНИ ПОРЪЧКИ */}
         <div className="mt-8">

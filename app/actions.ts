@@ -55,3 +55,70 @@ export async function createOrder(formData: FormData) {
   // 5. Казваме на Next.js да обнови екрана веднага
   revalidatePath('/')
 }
+
+import axios from 'axios';
+
+export async function syncMetaAdSpend() {
+  const AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
+  const ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
+
+  if (!AD_ACCOUNT_ID || !ACCESS_TOKEN) {
+    throw new Error("Липсват настройки за Meta (ID или Token)");
+  }
+
+  // 1. Определяме датата: "Вчера"
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dateString = yesterday.toISOString().split('T')[0]; // Формат "2023-10-25"
+
+  try {
+    // 2. Питаме Facebook API
+    // URL: https://graph.facebook.com/v17.0/act_ID/insights...
+    const url = `https://graph.facebook.com/v17.0/act_${AD_ACCOUNT_ID}/insights`;
+    
+    const response = await axios.get(url, {
+      params: {
+        access_token: ACCESS_TOKEN,
+        time_range: JSON.stringify({ since: dateString, until: dateString }),
+        fields: 'spend',
+        level: 'account'
+      }
+    });
+
+    // 3. Обработваме отговора
+    const data = response.data.data[0];
+    
+    if (!data) {
+      console.log(`Няма данни за разходи за дата ${dateString}`);
+      return; // Няма изхарчени пари
+    }
+
+    const spendAmount = parseFloat(data.spend); // Facebook връща сумата в основната валута на акаунта
+    const vatAmount = spendAmount * 0.20; // 20% ДДС
+    const totalAmount = spendAmount + vatAmount;
+
+    // 4. Записваме в базата
+    // Използваме upsert: Ако вече има запис за тази дата -> го обновяваме. Ако няма -> създаваме нов.
+    await prisma.adSpend.upsert({
+      where: { date: new Date(dateString) },
+      update: {
+        amount: spendAmount,
+        vatAmount: vatAmount,
+        total: totalAmount
+      },
+      create: {
+        date: new Date(dateString),
+        amount: spendAmount,
+        vatAmount: vatAmount,
+        total: totalAmount
+      }
+    });
+
+    console.log(`Успешно записани разходи за ${dateString}: ${totalAmount} (с ДДС)`);
+    revalidatePath('/'); // Обновяваме екрана
+
+  } catch (error: any) {
+    console.error("Грешка при връзка с Meta:", error.response?.data || error.message);
+    throw new Error("Неуспешно извличане на данни от Meta");
+  }
+}
