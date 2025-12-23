@@ -4,56 +4,52 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const data = await request.json();
+    console.log(`📥 Нова поръчка: ${data.name} (${data.total_price} ${data.currency})`);
 
-    console.log("📥 Получена поръчка от Shopify:", data.name);
-
-    // 1. Извличане на основни данни
-    const orderId = data.id.toString();
-    const orderNumber = data.name; // напр. #1024
-    const totalPrice = parseFloat(data.total_price); // Крайна сума, която клиента плаща
-    const createdAt = new Date(data.created_at);
-    
-    // 2. Определяне на метод на плащане (COD или Карта)
-    // Shopify връща масив `payment_gateway_names`. 
-    // Обикновено "manual" е Наложен платеж, a "shopify_payments" или "stripe" е карта.
-    const gateways = data.payment_gateway_names || [];
-    let paymentMethod = 'Card'; // По подразбиране приемаме, че е платено
-    let isRevenueLocked = false;
-
-    // ПРОВЕРИ ТОВА: Виж в Shopify как точно се води наложения ти платеж. 
-    // Често е 'manual' или съдържа думата 'cod' или 'cash'.
-    if (gateways.includes('manual') || gateways.includes('cash_on_delivery')) {
-        paymentMethod = 'COD';
-        isRevenueLocked = true; // Заключваме парите
+    // 1. ВАЛУТНА КОНВЕРСИЯ (КРИТИЧНО!)
+    // Shopify праща BGN, ние искаме EUR.
+    let totalPrice = parseFloat(data.total_price);
+    if (data.currency === 'BGN') {
+        totalPrice = totalPrice / 1.95583; // Конвертиране в Евро
     }
 
-    // 3. Изчисляване на банкови такси (ако е с карта)
+    const orderId = data.id.toString();
+    const orderNumber = data.name;
+    const createdAt = new Date(data.created_at);
+    
+    // 2. Метод на плащане
+    const gateways = data.payment_gateway_names || [];
+    let paymentMethod = 'Card'; 
+    let isRevenueLocked = false;
+
+    // Проверка за наложен платеж (COD)
+    // Търсим думи като manual, cash, cod
+    if (gateways.includes('manual') || gateways.includes('cash_on_delivery') || gateways.some((g: string) => g.includes('cash'))) {
+        paymentMethod = 'COD';
+        isRevenueLocked = true;
+    }
+
+    // 3. Такси (ако е платено с карта/онлайн)
     let gatewayFee = 0;
     if (!isRevenueLocked) {
-        // Твоята формула: 0.26€ + 1.9%
+        // Формула: 0.26€ + 1.9% (прилагаме я върху сумата в ЕВРО)
         gatewayFee = 0.26 + (totalPrice * 0.019);
     }
 
-    // 4. Обработка на продуктите и изчисляване на нашите разходи
+    // 4. Логика за РАЗХОД НА ПРОДУКТ (Спрямо твоята снимка)
     let totalProductCost = 0;
     
-    // Създаваме списък с продукти за базата
     const orderItemsData = data.line_items.map((item: any) => {
-        let cost = 0;
+        let cost = 13.80; // По подразбиране приемаме, че е малка (най-честата)
         const title = item.title.toLowerCase();
-        const variant = item.variant_title ? item.variant_title.toLowerCase() : '';
 
-        // ЛОГИКА ЗА ЦЕНАТА: Тук трябва да сме сигурни как се казват продуктите ти
-        // Примерна логика според твоето описание:
-        if (title.includes('малка') || variant.includes('small') || variant.includes('малка')) {
-            cost = 13.80;
-        } else if (title.includes('голяма') || variant.includes('big') || variant.includes('голяма')) {
+        // Ако името съдържа 50см, капибара или голямо -> по-високия разход
+        if (title.includes('50см') || title.includes('капибара') || title.includes('голямо')) {
             cost = 19.50;
-        } else {
-            // Ако не разпознаем, слагаме средно или 0 (трябва да следиш логовете)
-            console.warn(`⚠️ Неразпознат продукт: ${title}. Слагам цена 0.`);
-            cost = 0;
-        }
+        } 
+        // Ако изрично е 30см или друго -> остава 13.80
+        
+        console.log(`📦 Продукт: ${item.title} -> Разход: ${cost}€`);
 
         totalProductCost += (cost * item.quantity);
 
@@ -64,15 +60,11 @@ export async function POST(request: Request) {
         };
     });
 
-    // 5. Цена за доставка (Разход за нас към Еконт/Спиди)
-    // Трябва да знаем колко НИЕ плащаме на куриера. 
-    // Засега слагаме усреднена стойност, ако няма как да я разберем от Shopify веднага.
-    // Ти ми каза: "Econt доставки – 0.77€ (може би има API)". 
-    // Засега ще сложим твърда стойност, която можеш да промениш.
-    const estimatedShippingCost = 4.50; // Слагам примерна цена 4.50 EUR, промени я ако е фиксирана другаде
+    // 5. Доставка (Разход към Еконт)
+    // Засега слагаме фиксирана, докато не направим интеграция
+    const estimatedShippingCost = 4.50; 
 
     // 6. Запис в базата
-    // Проверяваме дали вече не съществува (Shopify понякога праща по 2 пъти)
     const existingOrder = await prisma.order.findUnique({ where: { id: orderId } });
 
     if (!existingOrder) {
@@ -82,7 +74,7 @@ export async function POST(request: Request) {
                 orderNumber: orderNumber,
                 createdAt: createdAt,
                 paymentMethod: paymentMethod,
-                totalAmount: totalPrice,
+                totalAmount: totalPrice, // Вече е в EUR
                 productCost: totalProductCost,
                 shippingCost: estimatedShippingCost,
                 gatewayFee: gatewayFee,
@@ -93,7 +85,7 @@ export async function POST(request: Request) {
                 }
             }
         });
-        console.log(`✅ Поръчка ${orderNumber} записана успешно!`);
+        console.log(`✅ Поръчка ${orderNumber} записана. Сума: ${totalPrice.toFixed(2)}€`);
     } else {
         console.log(`ℹ️ Поръчка ${orderNumber} вече съществува.`);
     }
@@ -101,7 +93,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error("❌ Грешка при обработка на Webhook:", error);
+    console.error("❌ ГРЕШКА:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
