@@ -11,7 +11,9 @@ const formatMoney = (amount: number) => {
 export default async function Home() {
   // 1. Взимаме Фиксираните разходи
   const fixedCosts = await prisma.fixedCostDefinition.findMany({ where: { isActive: true } });
-  const totalFixedExpenses = fixedCosts.reduce((acc, cost) => acc + Number(cost.amount), 0);
+  
+  // ПОПРАВКА: Добавено ": number" след acc
+  const totalFixedExpenses = fixedCosts.reduce((acc: number, cost) => acc + Number(cost.amount), 0);
 
   // 2. Взимаме Поръчките
   const orders = await prisma.order.findMany({ orderBy: { createdAt: 'desc' } });
@@ -19,22 +21,24 @@ export default async function Home() {
   // 3. СМЕТКИ (Logic)
   
   // А) Реален Приход (само отключени поръчки)
+  // ПОПРАВКА: Добавено ": number"
   const realRevenue = orders
-    .filter(o => !o.isRevenueLocked) // само ако НЕ са заключени
-    .reduce((acc, o) => acc + Number(o.totalAmount), 0);
+    .filter(o => !o.isRevenueLocked) 
+    .reduce((acc: number, o) => acc + Number(o.totalAmount), 0);
 
   // Б) Заключен Приход (чакащи в куриера)
+  // ПОПРАВКА: Добавено ": number"
   const lockedRevenue = orders
     .filter(o => o.isRevenueLocked)
-    .reduce((acc, o) => acc + Number(o.totalAmount), 0);
+    .reduce((acc: number, o) => acc + Number(o.totalAmount), 0);
 
-  // В) Променливи Разходи (Продукт + Доставка + Такси)
-  // Важно: Разходът се начислява ВЕДНАГА, независимо дали парите са заключени!
-  const variableExpenses = orders.reduce((acc, o) => {
+  // В) Променливи Разходи
+  // ПОПРАВКА: Добавено ": number"
+  const variableExpenses = orders.reduce((acc: number, o) => {
     return acc 
       + Number(o.productCost) 
       + Number(o.shippingCost) 
-      + Number(o.gatewayFee); // Такса банка
+      + Number(o.gatewayFee); 
   }, 0);
 
   // Г) Общо Разходи
